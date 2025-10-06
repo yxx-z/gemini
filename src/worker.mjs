@@ -16,7 +16,8 @@ export default {
       // 支持多种方式获取 API Key
       const apiKeyFromQuery = searchParams.get('api_key');
       const apiKeyFromAuth = auth?.split(" ")[1];
-      const apiKey = apiKeyFromQuery || apiKeyFromAuth;
+      const apiKeyFromHeaders = request.headers.get("x-goog-api-key");
+      const apiKey = apiKeyFromQuery || apiKeyFromHeaders || apiKeyFromAuth;
       
       const assert = (success) => {
         if (!success) {
