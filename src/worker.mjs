@@ -11,18 +11,30 @@ export default {
     };
     try {
       const auth = request.headers.get("Authorization");
-      const apiKey = auth?.split(" ")[1];
+      const { pathname, searchParams } = new URL(request.url);
+      
+      // 支持多种方式获取 API Key
+      const apiKeyFromQuery = searchParams.get('api_key');
+      const apiKeyFromAuth = auth?.split(" ")[1];
+      const apiKey = apiKeyFromQuery || apiKeyFromAuth;
+      
       const assert = (success) => {
         if (!success) {
           throw new HttpError("The specified HTTP method is not allowed for the requested resource", 400);
         }
       };
-      const { pathname } = new URL(request.url);
       
       // 处理 TTS 语音生成请求
       if (pathname.includes("/models/gemini-2.5-flash-preview-tts:generateContent")) {
         assert(request.method === "POST");
         return handleTTSGeneration(await request.json(), apiKey)
+          .catch(errHandler);
+      }
+      
+      // 处理通用模型调用（包括其他预览模型）
+      if (pathname.includes(":generateContent")) {
+        assert(request.method === "POST");
+        return handleGenericGeneration(pathname, await request.json(), apiKey)
           .catch(errHandler);
       }
       
@@ -85,6 +97,10 @@ const makeHeaders = (apiKey, more) => ({
 
 // 处理 TTS 语音生成
 async function handleTTSGeneration(req, apiKey) {
+  if (!apiKey) {
+    throw new HttpError("API Key is required", 401);
+  }
+  
   const response = await fetch(`${BASE_URL}/${API_VERSION}/models/gemini-2.5-flash-preview-tts:generateContent`, {
     method: "POST",
     headers: makeHeaders(apiKey, { "Content-Type": "application/json" }),
@@ -92,6 +108,27 @@ async function handleTTSGeneration(req, apiKey) {
   });
   
   // 直接转发响应，包括音频数据
+  return new Response(response.body, fixCors({
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  }));
+}
+
+// 处理通用模型生成请求
+async function handleGenericGeneration(pathname, req, apiKey) {
+  if (!apiKey) {
+    throw new HttpError("API Key is required", 401);
+  }
+  
+  // 直接从路径名构建 URL
+  const url = `${BASE_URL}/${API_VERSION}${pathname}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: makeHeaders(apiKey, { "Content-Type": "application/json" }),
+    body: JSON.stringify(req)
+  });
+  
   return new Response(response.body, fixCors({
     status: response.status,
     statusText: response.statusText,
@@ -121,6 +158,10 @@ async function handleModels (apiKey) {
 
 const DEFAULT_EMBEDDINGS_MODEL = "gemini-embedding-001";
 async function handleEmbeddings (req, apiKey) {
+  if (!apiKey) {
+    throw new HttpError("API Key is required", 401);
+  }
+  
   let modelFull, model;
   switch (true) {
     case typeof req.model !== "string":
@@ -168,6 +209,10 @@ async function handleEmbeddings (req, apiKey) {
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 async function handleCompletions (req, apiKey) {
+  if (!apiKey) {
+    throw new HttpError("API Key is required", 401);
+  }
+  
   let model;
   switch (true) {
     case typeof req.model !== "string":
