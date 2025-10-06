@@ -18,6 +18,14 @@ export default {
         }
       };
       const { pathname } = new URL(request.url);
+      
+      // 处理 TTS 语音生成请求
+      if (pathname.includes("/models/gemini-2.5-flash-preview-tts:generateContent")) {
+        assert(request.method === "POST");
+        return handleTTSGeneration(await request.json(), apiKey)
+          .catch(errHandler);
+      }
+      
       switch (true) {
         case pathname.endsWith("/chat/completions"):
           assert(request.method === "POST");
@@ -74,6 +82,22 @@ const makeHeaders = (apiKey, more) => ({
   ...(apiKey && { "x-goog-api-key": apiKey }),
   ...more
 });
+
+// 处理 TTS 语音生成
+async function handleTTSGeneration(req, apiKey) {
+  const response = await fetch(`${BASE_URL}/${API_VERSION}/models/gemini-2.5-flash-preview-tts:generateContent`, {
+    method: "POST",
+    headers: makeHeaders(apiKey, { "Content-Type": "application/json" }),
+    body: JSON.stringify(req)
+  });
+  
+  // 直接转发响应，包括音频数据
+  return new Response(response.body, fixCors({
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  }));
+}
 
 async function handleModels (apiKey) {
   const response = await fetch(`${BASE_URL}/${API_VERSION}/models`, {
